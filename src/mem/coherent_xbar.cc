@@ -170,8 +170,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         return false;
     }
 
-    DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
-            src_port->name(), pkt->print());
+    DPRINTF(CoherentXBar, "%s: src=%s %s 0x%x curTick=%ld\n", __func__,
+            src_port->name(), pkt->print(), pkt->getAddr(), curTick());
 
     // store size and command as they might be modified when
     // forwarding the packet
@@ -189,6 +189,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     // determine how long to be crossbar layer is busy
     Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
+    DPRINTF(CoherentXBar, "%s: pkt->payloadDelay=%d packetFinishTime=%ld\n",
+            __func__, pkt->payloadDelay, packetFinishTime);
 
     // is this the destination point for this packet? (e.g. true if
     // this xbar is the PoC for a cache maintenance operation to the
@@ -464,8 +466,8 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
         return false;
     }
 
-    DPRINTF(CoherentXBar, "%s: src %s packet %s\n", __func__,
-            src_port->name(), pkt->print());
+    DPRINTF(CoherentXBar, "%s: src=%s %s 0x%x curTick=%ld\n", __func__,
+            src_port->name(), pkt->print(), pkt->getAddr(), curTick());
 
     // store size and command as they might be modified when
     // forwarding the packet
@@ -489,6 +491,9 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // send the packet through the destination CPU-side port and pay for
     // any outstanding header delay
     Tick latency = pkt->headerDelay;
+    DPRINTF(CoherentXBar, "%s: pkt->payloadDelay=%d packetFinishTime=%ld"
+            "curTick=%ld latency=%ld\n",
+            __func__, pkt->payloadDelay, packetFinishTime, curTick(), latency);
     pkt->headerDelay = 0;
     cpuSidePorts[cpu_side_port_id]->schedTimingResp(pkt, curTick()
                                         + latency);

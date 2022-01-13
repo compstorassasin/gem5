@@ -64,6 +64,7 @@ from common.FileSystemConfig import config_filesystem
 from common.Caches import *
 from common.cpu2000 import *
 
+
 def get_processes(args):
     """Interprets provided args and returns a list of processes"""
 
@@ -85,7 +86,7 @@ def get_processes(args):
 
     idx = 0
     for wrkld in workloads:
-        process = Process(pid = 100 + idx)
+        process = Process(pid=100 + idx)
         process.executable = wrkld
         process.cwd = os.getcwd()
         process.gid = os.getgid()
@@ -110,7 +111,7 @@ def get_processes(args):
         idx += 1
 
     if args.smt:
-        assert(args.cpu_type == "DerivO3CPU")
+        assert (args.cpu_type == "DerivO3CPU")
         return multiprocesses, idx
     else:
         return multiprocesses, 1
@@ -137,11 +138,11 @@ if args.bench:
     for app in apps:
         try:
             if buildEnv['TARGET_ISA'] == 'arm':
-                exec("workload = %s('arm_%s', 'linux', '%s')" % (
-                        app, args.arm_iset, args.spec_input))
+                exec("workload = %s('arm_%s', 'linux', '%s')" %
+                     (app, args.arm_iset, args.spec_input))
             else:
-                exec("workload = %s(buildEnv['TARGET_ISA', 'linux', '%s')" % (
-                        app, args.spec_input))
+                exec("workload = %s(buildEnv['TARGET_ISA', 'linux', '%s')" %
+                     (app, args.spec_input))
             multiprocesses.append(workload.makeProcess())
         except:
             print("Unable to find workload for %s: %s" %
@@ -154,7 +155,6 @@ else:
     print("No workload specified. Exiting!\n", file=sys.stderr)
     sys.exit(1)
 
-
 (CPUClass, test_mem_mode, FutureClass) = Simulation.setCPUClass(args)
 CPUClass.numThreads = numThreads
 
@@ -164,28 +164,27 @@ if args.smt and args.num_cpus > 1:
 
 np = args.num_cpus
 mp0_path = multiprocesses[0].executable
-system = System(cpu = [CPUClass(cpu_id=i) for i in range(np)],
-                mem_mode = test_mem_mode,
-                mem_ranges = [AddrRange(args.mem_size)],
-                cache_line_size = args.cacheline_size)
+system = System(cpu=[CPUClass(cpu_id=i) for i in range(np)],
+                mem_mode=test_mem_mode,
+                mem_ranges=[AddrRange(args.mem_size)],
+                cache_line_size=args.cacheline_size)
 
 if numThreads > 1:
     system.multi_thread = True
 
 # Create a top-level voltage domain
-system.voltage_domain = VoltageDomain(voltage = args.sys_voltage)
+system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)
 
 # Create a source clock for the system and set the clock period
-system.clk_domain = SrcClockDomain(clock =  args.sys_clock,
-                                   voltage_domain = system.voltage_domain)
+system.clk_domain = SrcClockDomain(clock=args.sys_clock,
+                                   voltage_domain=system.voltage_domain)
 
 # Create a CPU voltage domain
 system.cpu_voltage_domain = VoltageDomain()
 
 # Create a separate clock domain for the CPUs
-system.cpu_clk_domain = SrcClockDomain(clock = args.cpu_clock,
-                                       voltage_domain =
-                                       system.cpu_voltage_domain)
+system.cpu_clk_domain = SrcClockDomain(
+    clock=args.cpu_clock, voltage_domain=system.cpu_voltage_domain)
 
 # If elastic tracing is enabled, then configure the cpu and attach the elastic
 # trace probe
@@ -240,10 +239,10 @@ for i in range(np):
 
 if args.ruby:
     Ruby.create_system(args, False, system)
-    assert(args.num_cpus == len(system.ruby._cpu_ports))
+    assert (args.num_cpus == len(system.ruby._cpu_ports))
 
-    system.ruby.clk_domain = SrcClockDomain(clock = args.ruby_clock,
-                                        voltage_domain = system.voltage_domain)
+    system.ruby.clk_domain = SrcClockDomain(
+        clock=args.ruby_clock, voltage_domain=system.voltage_domain)
     for i in range(np):
         ruby_port = system.ruby._cpu_ports[i]
 
@@ -255,7 +254,6 @@ if args.ruby:
         # Connect the cpu's cache ports to Ruby
         ruby_port.connectCpuPorts(system.cpu[i])
 else:
-    MemClass = Simulation.setMemClass(args)
     system.membus = SystemXBar()
     system.system_port = system.membus.cpu_side_ports
     CacheConfig.config_cache(args, system)
@@ -267,5 +265,18 @@ system.workload = SEWorkload.init_compatible(mp0_path)
 if args.wait_gdb:
     system.workload.wait_for_remote_gdb = True
 
-root = Root(full_system = False, system = system)
+root = Root(full_system=False, system=system)
+Simulation.initialize(args, root, system, FutureClass)
+
+# bool map(Addr vaddr, Addr paddr, int size, bool cacheable = true);
+scratchpad_start = Addr(args.scratchpad_addr)
+scratchpad_size = Addr(args.scratchpad_size).value
+streambuffer_start = Addr(args.streambuffer_addr).value
+streambuffer_size = Addr(args.streambuffer_size).value
+for process in multiprocesses:
+    if args.scratchpad:
+        process.map(scratchpad_start, scratchpad_start, scratchpad_size)
+    if args.streambuffer:
+        process.map(streambuffer_start, streambuffer_start, streambuffer_size)
+
 Simulation.run(args, root, system, FutureClass)

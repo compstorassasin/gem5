@@ -118,8 +118,8 @@ NoncoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
         return false;
     }
 
-    DPRINTF(NoncoherentXBar, "recvTimingReq: src %s %s 0x%x\n",
-            src_port->name(), pkt->cmdString(), pkt->getAddr());
+    DPRINTF(NoncoherentXBar, "%s: src=%s %s 0x%x curTick=%ld\n", __func__,
+            src_port->name(), pkt->cmdString(), pkt->getAddr(), curTick());
 
     // store size and command as they might be modified when
     // forwarding the packet
@@ -136,7 +136,9 @@ NoncoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     calcPacketTiming(pkt, xbar_delay);
 
     // determine how long to be crossbar layer is busy
-    Tick packetFinishTime = clockEdge(Cycles(1)) + pkt->payloadDelay;
+    Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
+    DPRINTF(NoncoherentXBar, "%s: pkt->payloadDelay=%d packetFinishTime=%ld\n",
+            __func__, pkt->payloadDelay, packetFinishTime);
 
     // before forwarding the packet (and possibly altering it),
     // remember if we are expecting a response
@@ -182,6 +184,9 @@ NoncoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
+    DPRINTF(NoncoherentXBar, "%s: src=%s %s 0x%x curTick=%ld\n", __func__,
+            src_port->name(), pkt->cmdString(), pkt->getAddr(), curTick());
+
     // determine the destination
     const auto route_lookup = routeTo.find(pkt->req);
     assert(route_lookup != routeTo.end());
@@ -192,13 +197,11 @@ NoncoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // test if the layer should be considered occupied for the current
     // port
     if (!respLayers[cpu_side_port_id]->tryTiming(src_port)) {
-        DPRINTF(NoncoherentXBar, "recvTimingResp: src %s %s 0x%x BUSY\n",
+        DPRINTF(NoncoherentXBar, "%s: src %s %s 0x%x BUSY\n", __func__,
                 src_port->name(), pkt->cmdString(), pkt->getAddr());
         return false;
     }
 
-    DPRINTF(NoncoherentXBar, "recvTimingResp: src %s %s 0x%x\n",
-            src_port->name(), pkt->cmdString(), pkt->getAddr());
 
     // store size and command as they might be modified when
     // forwarding the packet
@@ -212,14 +215,21 @@ NoncoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     calcPacketTiming(pkt, xbar_delay);
 
     // determine how long to be crossbar layer is busy
-    Tick packetFinishTime = clockEdge(Cycles(1)) + pkt->payloadDelay;
+    Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
 
     // send the packet through the destination CPU-side port, and pay for
     // any outstanding latency
     Tick latency = pkt->headerDelay;
+    DPRINTF(NoncoherentXBar, "%s: pkt->payloadDelay=%d packetFinishTime=%ld "
+            "curTick=%ld latency=%ld\n",
+            __func__, pkt->payloadDelay, packetFinishTime, curTick(), latency);
     pkt->headerDelay = 0;
-    cpuSidePorts[cpu_side_port_id]->schedTimingResp(pkt,
-                                        curTick() + latency);
+    if (latency) {
+        cpuSidePorts[cpu_side_port_id]->schedTimingResp(pkt,
+                                                curTick() + latency);
+    } else {
+        cpuSidePorts[cpu_side_port_id]->sendTimingResp(pkt);
+    }
 
     // remove the request from the routing table
     routeTo.erase(route_lookup);

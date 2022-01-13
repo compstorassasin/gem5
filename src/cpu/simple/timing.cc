@@ -51,6 +51,7 @@
 #include "debug/HtmCpu.hh"
 #include "debug/Mwait.hh"
 #include "debug/SimpleCPU.hh"
+#include "debug/SimpleCPUTick.hh"
 #include "mem/packet.hh"
 #include "mem/packet_access.hh"
 #include "params/TimingSimpleCPU.hh"
@@ -725,6 +726,7 @@ TimingSimpleCPU::sendFetch(const Fault &fault, const RequestPtr &req,
     if (fault == NoFault) {
         DPRINTF(SimpleCPU, "Sending fetch for addr %#x(pa: %#x)\n",
                 req->getVaddr(), req->getPaddr());
+        DPRINTF(SimpleCPUTick, "%s_Begin: %ld\n", __func__, curTick());
         ifetch_pkt = new Packet(req, MemCmd::ReadReq);
         ifetch_pkt->dataStatic(decoder->moreBytesPtr());
         DPRINTF(SimpleCPU, " -- pkt addr: %#x\n", ifetch_pkt->getAddr());
@@ -819,6 +821,7 @@ TimingSimpleCPU::advanceInst(const Fault &fault)
 void
 TimingSimpleCPU::completeIfetch(PacketPtr pkt)
 {
+    DPRINTF(SimpleCPUTick, "%s_Begin: %ld\n", __func__, curTick());
     SimpleExecContext& t_info = *threadInfo[curThread];
 
     DPRINTF(SimpleCPU, "Complete ICache Fetch for addr %#x\n", pkt ?
@@ -907,6 +910,7 @@ bool
 TimingSimpleCPU::IcachePort::recvTimingResp(PacketPtr pkt)
 {
     DPRINTF(SimpleCPU, "Received fetch response %#x\n", pkt->getAddr());
+    DPRINTF(SimpleCPUTick, "%s_Begin: %ld\n", __func__, curTick());
 
     // hardware transactional memory
     // Currently, there is no support for tracking instruction fetches

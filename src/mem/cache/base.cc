@@ -51,6 +51,7 @@
 #include "debug/CacheComp.hh"
 #include "debug/CachePort.hh"
 #include "debug/CacheRepl.hh"
+#include "debug/CacheTick.hh"
 #include "debug/CacheVerbose.hh"
 #include "debug/HWPrefetch.hh"
 #include "mem/cache/compressors/base.hh"
@@ -351,6 +352,7 @@ BaseCache::recvTimingReq(PacketPtr pkt)
 {
     // anything that is merely forwarded pays for the forward latency and
     // the delay provided by the crossbar
+    DPRINTF(CacheTick, "recvTimingReq_Begin: %ld\n", curTick());
     Tick forward_time = clockEdge(forwardLatency) + pkt->headerDelay;
 
     Cycles lat;
@@ -402,6 +404,7 @@ BaseCache::recvTimingReq(PacketPtr pkt)
             schedMemSideSendEvent(next_pf_time);
         }
     }
+    DPRINTF(CacheTick, "recvTimingReq_End: %ld\n", curTick());
 }
 
 void
@@ -420,6 +423,7 @@ void
 BaseCache::recvTimingResp(PacketPtr pkt)
 {
     assert(pkt->isResponse());
+    DPRINTF(CacheTick, "recvTimingResp_Begin: %ld\n", curTick());
 
     // all header delay should be paid for by the crossbar, unless
     // this is a prefetch response from above
@@ -441,6 +445,7 @@ BaseCache::recvTimingResp(PacketPtr pkt)
     if (pkt->isWrite()) {
         assert(pkt->req->isUncacheable());
         handleUncacheableWriteResp(pkt);
+        DPRINTF(CacheTick, "recvTimingResp_End: %ld\n", curTick());
         return;
     }
 
@@ -551,6 +556,7 @@ BaseCache::recvTimingResp(PacketPtr pkt)
     doWritebacks(writebacks, forward_time);
 
     DPRINTF(CacheVerbose, "%s: Leaving with %s\n", __func__, pkt->print());
+    DPRINTF(CacheTick, "recvTimingResp_End: %ld\n", curTick());
     delete pkt;
 }
 

@@ -108,6 +108,7 @@ BaseXBar::calcPacketTiming(PacketPtr pkt, Tick header_delay)
     // coinciding with its own clock, so start by determining how long
     // until the next clock edge (could be zero)
     Tick offset = clockEdge() - curTick();
+    DPRINTF(BaseXBar, "%s: offset=%ld\n", __func__, offset);
 
     // the header delay depends on the path through the crossbar, and
     // we therefore rely on the caller to provide the actual
@@ -128,9 +129,9 @@ BaseXBar::calcPacketTiming(PacketPtr pkt, Tick header_delay)
         // deliver the payload of the packet, after the header delay,
         // we take the maximum since the payload delay could already
         // be longer than what this parcitular crossbar enforces.
-        pkt->payloadDelay = std::max<Tick>(pkt->payloadDelay,
-                                           divCeil(pkt->getSize(), width) *
-                                           clockPeriod());
+        pkt->payloadDelay = width ? std::max<Tick>(
+            pkt->payloadDelay, divCeil(pkt->getSize(), width) * clockPeriod())
+                                  : 0;
     }
 
     // the payload delay is not paying for the clock offset as that is
@@ -168,7 +169,8 @@ void BaseXBar::Layer<SrcType, DstType>::occupyLayer(Tick until)
     assert(state == BUSY);
 
     // until should never be 0 as express snoops never occupy the layer
-    assert(until != 0);
+    // until could be 0. Simple xbar with 0 latency for scratchpad & cache.
+    // assert(until != 0);
     xbar.schedule(releaseEvent, until);
 
     // account for the occupied ticks

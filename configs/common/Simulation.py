@@ -424,13 +424,8 @@ def repeatSwitch(testsys, repeat_switch_cpu_list, maxtick, switch_freq):
             exit_event = m5.simulate(maxtick - m5.curTick())
             return exit_event
 
-def run(options, root, testsys, cpu_class):
-    if options.checkpoint_dir:
-        cptdir = options.checkpoint_dir
-    elif m5.options.outdir:
-        cptdir = m5.options.outdir
-    else:
-        cptdir = getcwd()
+
+def initialize(options, root, testsys, cpu_class):
 
     if options.fast_forward and options.checkpoint_restore != None:
         fatal("Can't specify both --fast-forward and --checkpoint-restore")
@@ -621,6 +616,13 @@ def run(options, root, testsys, cpu_class):
     if options.initialize_only:
         return
 
+def run(options, root, testsys, cpu_class):
+    if options.checkpoint_dir:
+        cptdir = options.checkpoint_dir
+    elif m5.options.outdir:
+        cptdir = m5.options.outdir
+    else:
+        cptdir = getcwd()
     # Handle the max tick settings now that tick frequency was resolved
     # during system instantiation
     # NOTE: the maxtick variable here is in absolute ticks, so it must

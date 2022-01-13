@@ -45,12 +45,14 @@ from m5.objects import *
 from common.Caches import *
 from common import ObjectList
 
+
 def _get_hwp(hwp_option):
     if hwp_option == None:
         return NULL
 
     hwpClass = ObjectList.hwp_list.get(hwp_option)
     return hwpClass()
+
 
 def _get_cache_opts(level, options):
     opts = {}
@@ -68,6 +70,7 @@ def _get_cache_opts(level, options):
         opts['prefetcher'] = _get_hwp(getattr(options, prefetcher_attr))
 
     return opts
+
 
 def config_cache(options, system):
     if options.external_memory_system and (options.caches or options.l2cache):
@@ -121,7 +124,7 @@ def config_cache(options, system):
         system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
                                    **_get_cache_opts('l2', options))
 
-        system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
+        system.tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
         system.l2.cpu_side = system.tol2bus.mem_side_ports
         system.l2.mem_side = system.membus.cpu_side_ports
 
@@ -129,9 +132,73 @@ def config_cache(options, system):
         system.memchecker = MemChecker()
 
     for i in range(options.num_cpus):
+        scratchpad = None
+        scratchpad_monitor = None
+        scratchpad_start = Addr(options.scratchpad_addr).value
+        scratchpad_size = Addr(options.scratchpad_size).value
+        scratchpad_end = scratchpad_start + scratchpad_size
+        addr_hole = None
+        if options.scratchpad:
+            addr_hole = (scratchpad_start, scratchpad_end)
+
+            scratchpad = SimpleMemory()
+            scratchpad.range = AddrRange(start=scratchpad_start,
+                                         size=scratchpad_size)
+            scratchpad.latency = Latency(Frequency(options.cpu_clock)) *\
+                options.scratchpad_cycles
+            scratchpad.bandwidth = MemoryBandwidth(
+                str(
+                    Frequency(options.cpu_clock).value *
+                    options.scratchpad_ports * 4 //
+                    options.scratchpad_cycles) + "B/s")
+            if options.scratchpad_trace:
+                scratchpad_monitor = CommMonitor()
+                scratchpad_monitor.trace = MemTraceProbe(
+                    trace_file="scratchpad.pb")
+                scratchpad_monitor.mem_side_port = scratchpad.port
+
+        streambuffer = None
+        streambuffer_monitor = None
+        streambuffer_start = Addr(options.streambuffer_addr).value
+        streambuffer_size = Addr(options.streambuffer_size).value
+        streambuffer_end = streambuffer_start + streambuffer_size
+        if options.streambuffer:
+            if addr_hole:
+                addr_hole = (addr_hole[0], streambuffer_end)
+            else:
+                addr_hole = (streambuffer_start, streambuffer_end)
+
+            streambuffer = SimpleMemory()
+            streambuffer.range = AddrRange(start=streambuffer_start,
+                                           size=streambuffer_size)
+            streambuffer.latency = Latency(Frequency(options.cpu_clock)) *\
+                options.streambuffer_cycles
+            streambuffer.bandwidth = MemoryBandwidth(
+                str(
+                    Frequency(options.cpu_clock).value *
+                    options.streambuffer_ports * 4 //
+                    options.streambuffer_cycles) + "B/s")
+            if options.streambuffer_trace:
+                streambuffer_monitor = CommMonitor()
+                streambuffer_monitor.trace = MemTraceProbe(
+                    trace_file="streambuffer.pb")
+                streambuffer_monitor.mem_side_port = streambuffer.port
+
         if options.caches:
             icache = icache_class(**_get_cache_opts('l1i', options))
             dcache = dcache_class(**_get_cache_opts('l1d', options))
+            if addr_hole:
+                icache.addr_ranges = [
+                    AddrRange(start=0, size=addr_hole[0]),
+                    AddrRange(start=addr_hole[1], size=Addr.max - addr_hole[1])
+                ]
+                dcache.addr_ranges = [
+                    AddrRange(start=0, size=addr_hole[0]),
+                    AddrRange(start=addr_hole[1], size=Addr.max - addr_hole[1])
+                ]
+            else:
+                icache.addr_ranges = [AllMemory]
+                dcache.addr_ranges = [AllMemory]
 
             # If we have a walker cache specified, instantiate two
             # instances here
@@ -159,8 +226,11 @@ def config_cache(options, system):
 
             # When connecting the caches, the clock is also inherited
             # from the CPU in question
-            system.cpu[i].addPrivateSplitL1Caches(icache, dcache,
-                                                  iwalkcache, dwalkcache)
+            system.cpu[i].addPrivateSplitL1Caches(icache, dcache, iwalkcache,
+                                                  dwalkcache, scratchpad,
+                                                  scratchpad_monitor,
+                                                  streambuffer,
+                                                  streambuffer_monitor)
 
             if options.memchecker:
                 # The mem_side ports of the caches haven't been connected yet.
@@ -169,6 +239,7 @@ def config_cache(options, system):
                 system.cpu[i].dcache_mon = dcache_mon
 
         elif options.external_memory_system:
+            assert not options.scratchpad, "External scratchpad not supported"
             # These port names are presented to whatever 'external' system
             # gem5 is connecting to.  Its configuration will likely depend
             # on these names.  For simplicity, we would advise configuring
@@ -176,27 +247,28 @@ def config_cache(options, system):
             # the names below.
             if buildEnv['TARGET_ISA'] in ['x86', 'arm', 'riscv']:
                 system.cpu[i].addPrivateSplitL1Caches(
-                        ExternalCache("cpu%d.icache" % i),
-                        ExternalCache("cpu%d.dcache" % i),
-                        ExternalCache("cpu%d.itb_walker_cache" % i),
-                        ExternalCache("cpu%d.dtb_walker_cache" % i))
+                    ExternalCache("cpu%d.icache" % i),
+                    ExternalCache("cpu%d.dcache" % i),
+                    ExternalCache("cpu%d.itb_walker_cache" % i),
+                    ExternalCache("cpu%d.dtb_walker_cache" % i))
             else:
                 system.cpu[i].addPrivateSplitL1Caches(
-                        ExternalCache("cpu%d.icache" % i),
-                        ExternalCache("cpu%d.dcache" % i))
+                    ExternalCache("cpu%d.icache" % i),
+                    ExternalCache("cpu%d.dcache" % i))
 
         system.cpu[i].createInterruptController()
         if options.l2cache:
-            system.cpu[i].connectAllPorts(
-                system.tol2bus.cpu_side_ports,
-                system.membus.cpu_side_ports, system.membus.mem_side_ports)
+            system.cpu[i].connectAllPorts(system.tol2bus.cpu_side_ports,
+                                          system.membus.cpu_side_ports,
+                                          system.membus.mem_side_ports)
         elif options.external_memory_system:
-            system.cpu[i].connectUncachedPorts(
-                system.membus.cpu_side_ports, system.membus.mem_side_ports)
+            system.cpu[i].connectUncachedPorts(system.membus.cpu_side_ports,
+                                               system.membus.mem_side_ports)
         else:
             system.cpu[i].connectBus(system.membus)
 
     return system
+
 
 # ExternalSlave provides a "port", but when that port connects to a cache,
 # the connecting CPU SimObject wants to refer to its "cpu_side".
@@ -213,8 +285,11 @@ class ExternalCache(ExternalSlave):
             attr = "port"
         return super(ExternalSlave, cls).__setattr__(attr, value)
 
+
 def ExternalCacheFactory(port_type):
     def make(name):
-        return ExternalCache(port_data=name, port_type=port_type,
+        return ExternalCache(port_data=name,
+                             port_type=port_type,
                              addr_ranges=[AllMemory])
+
     return make
