@@ -1,3 +1,17 @@
+# ASSASIN Extensions
+1. Scatchpad module that is modeled as a one-cycle random access SimpleMemory.
+2. Streambuffer module that is modeled as a one-cycle SimpleMemory with the tracing support that dumps IO traces for later MQSim retiming.
+3. SE mode simulation scripts updated for specifying scratchpads and streambuffers.
+
+# ASSASIN Evaluation Usage
+1. Programming requirements for compute functions:
+* Make compute functions to take scratchpad and streambuffer logical addresses and use them accordingly.
+* Access to streambuffer streamingly to ensure correct page IO trace generation.
+* malloc are not needed for these logical addresses as Gem5 simulation would allocate space for these logical address spaces in advance.
+2. Supply '--scratchpad' and '--streambuffer' as options to gem5 se.py. Use --help to see options that allow detailed control of these logical addresses and ranges.
+
+# Original Gem5 Readme
+
 This is the gem5 simulator.
 
 The main website can be found at http://www.gem5.org
